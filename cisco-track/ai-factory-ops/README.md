@@ -1,109 +1,130 @@
-# AI Factory Ops
+# AI Factory Ops (Web App)
 
-A rules-first, evidence-driven AI infrastructure operations assistant for the AI Factory challenge.
+AI Factory Ops is a multi-agent AIOps web application:
+- **Backend**: FastAPI + LangGraph orchestrator + DuckDB-backed specialist agents
+- **Frontend**: Next.js chat UI with diagnostics and chart rendering (line/bar/area/pie)
 
-## One-line pitch
+This README is intentionally focused on the **web app experience only**.
 
-Given a scenario ID, the system extracts deterministic telemetry features, ranks remediation actions with explicit rules, and optionally uses an LLM only to explain (never decide) the recommendation.
-
-## Architecture (three layers)
+## Web Stack Overview
 
 ```mermaid
 flowchart LR
-  A[DuckDB scenario_* views] --> B[Layer 1: Feature Extraction]
-  B --> C[Layer 2: Rule-Based Candidate Ranking]
-  C --> D[Layer 3: LLM Explainer Optional]
-  D --> E[Recommendation JSON]
+  U[User in Next.js UI] --> A[POST /chat]
+  A --> B[LangGraph Orchestrator]
+  B --> C1[inference_agent]
+  B --> C2[node_metrics_agent]
+  B --> C3[serving_agent]
+  B --> C4[alerts_logs_agent]
+  B --> C5[job_queue_agent]
+  C1 --> D[Answer + Traces + Chart Suggestions]
+  C2 --> D
+  C3 --> D
+  C4 --> D
+  C5 --> D
 ```
 
-- **Layer 1 (Deterministic features):** SQL-backed extraction per scenario (`src/features.py`)
-- **Layer 2 (Rules):** Explicit, track-aware action candidates with confidence and rule trail (`src/rules.py`)
-- **Layer 3 (Explainer):** Optional natural-language rationale from pre-computed facts only (`src/llm.py`)
-
-## Why rules + LLM-as-explainer (not LLM-as-decider)
-
-- Rules make decisions auditable and reproducible.
-- LLM output is constrained to explanation quality.
-- Offline/demo environments still work using `--no-llm`.
-- Avoids scenario hardcoding and keeps recommendations grounded in numeric evidence.
-
-## Repository layout
+## Repository Layout (Web-Relevant)
 
 ```text
 ai-factory-ops/
   src/
-    data.py
-    features.py
-    rules.py
-    runbooks.py
+    api.py
+    orchestrator.py
     llm.py
-    recommend.py
-    ui.py
-    cli.py
-  tests/
-  output/                    # active recommendation JSON outputs
-  archive/                   # archived runtime/cache artifacts and logs
-  data/                      # symlink to provided data folder
+    charts.py
+    settings.py
+    agents/
+  web/
+    src/app/page.tsx
+    package.json
+  data/
+  output/                    # runtime recommendation outputs used by existing flows
+  archive/                   # archived caches/logs
   requirements.txt
-  Makefile
   README.md
-  DEMO.md
 ```
 
-## Quickstart
+## 1) Environment Setup
 
+### Backend env (`ai-factory-ops/.env`)
+`src/settings.py` auto-loads this file.
+
+```bash
+# Provider keys (use one or both)
+GOOGLE_API_KEY="your-google-ai-studio-key"
+GEMINI_API_KEY="your-gemini-key"
+OPENAI_API_KEY="your-openai-key"
+
+# Optional model overrides
+AIFOPS_ROUTER_MODEL="gemini/gemini-2.0-flash"
+AIFOPS_EXPLAINER_MODEL="gemini/gemini-2.0-flash"
+```
+
+### Frontend env (`ai-factory-ops/web/.env.local`)
+```bash
+NEXT_PUBLIC_API_BASE_URL="http://127.0.0.1:8000"
+```
+
+## 2) Run the Web App
+
+### Start backend (FastAPI)
 ```bash
 cd ai-factory-ops
 pip install -r requirements.txt
-python -m src.cli list-scenarios
+python -m uvicorn src.api:app --reload
 ```
 
-## Core CLI commands
+Backend runs at: `http://127.0.0.1:8000`
 
+### Start frontend (Next.js)
 ```bash
-python -m src.cli --help
-python -m src.cli list-scenarios
-python -m src.cli extract --scenario-id perf-001
-python -m src.cli propose --scenario-id perf-001
-python -m src.cli runbook --scenario-id fail-001
-python -m src.cli recommend --scenario-id perf-001 --out output/perf-001.json --no-llm
-python -m src.cli recommend-all --no-llm
-python -m src.cli ui
+cd ai-factory-ops/web
+npm install
+npm run dev
 ```
 
-## Validate against judging hook
+Frontend runs at: `http://localhost:3000`
 
-Single output:
-```bash
-python ../ai_factory_hackathon_student/validate_recommendation.py output/perf-001.json
+## 3) API Contract Used by the UI
+
+### Health
+- `GET /health` → `{ "status": "ok" }`
+
+### Chat
+- `POST /chat`
+- Request:
+```json
+{ "question": "Why are latency and critical alerts high?" }
 ```
 
-All scenarios:
-```bash
-python ../ai_factory_hackathon_student/validate_recommendation.py --require-all output/all.json
-```
+- Response includes:
+  - `answer` (executive + orchestrated summary)
+  - `planner_mode`, `planner_debug`
+  - `chart_debug`
+  - `plan`
+  - `agent_results`
+  - `traces`
+  - `chart_suggestions`
 
-## Make targets
+## 4) UI Features
 
-```bash
-make install
-make list-scenarios
-make recommend-all
-make validate-all
-make demo
-```
+- **Final Answer** with markdown-like formatting
+- **Visual Insights** section with chart cards:
+  - line / bar / area / pie
+- **Diagnostics accordion**:
+  - plan
+  - agent summaries
+  - per-agent trace details (SQL, rows scanned, elapsed time)
 
-## Testing
+## 5) Troubleshooting
 
-```bash
-pytest tests/test_features.py
-pytest tests/test_rules.py
-pytest tests/test_runbooks.py
-```
-
-## Notes
-
-- No hardcoded per-scenario recommendation logic is used.
-- LLM never reads raw CSVs/tables directly.
-- Evidence includes top signals and triggered rule identifiers.
-- Keep recommendation outputs in `output/` for CLI/Make validation flows; archive transient caches/logs under `archive/`.
+- If frontend cannot reach backend:
+  - confirm backend is running on `127.0.0.1:8000`
+  - confirm `NEXT_PUBLIC_API_BASE_URL` in `web/.env.local`
+- If LLM routing fails:
+  - verify provider API key in `.env`
+  - check `planner_mode` and diagnostics in UI
+- If charts do not appear:
+  - query may not produce sufficient numeric evidence
+  - fallback chart generation still requires valid numeric fields

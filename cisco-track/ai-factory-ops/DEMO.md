@@ -1,52 +1,56 @@
-# AI Factory Ops Demo Script (90 seconds)
+# AI Factory Ops Web Demo Script (90 seconds)
 
 ## Goal
 
-Show deterministic recommendation generation, validation, and evidence-first UI quickly.
+Show the multi-agent web experience end-to-end: ask a production-style question, inspect orchestrated findings, and review visual insights + traces.
 
 ## Script
 
-### 1) Setup (15s)
+### 1) Setup backend + frontend (20s)
 
 ```bash
 cd ai-factory-ops
 pip install -r requirements.txt
+python -m uvicorn src.api:app --reload
 ```
 
-### 2) Batch recommendations + validation (20s)
+In a second terminal:
 
 ```bash
-make recommend-all
-make validate-all
+cd ai-factory-ops/web
+npm install
+npm run dev
 ```
+
+Open `http://localhost:3000`.
 
 Callout:
-- Mention that all scenarios are produced in `output/*.json` and consolidated in `output/all.json`.
-- Mention validation passes using the official hook.
+- Backend serves `/chat` and orchestrates specialist agents.
+- Frontend renders final answer, charts, and diagnostics.
 
-### 3) One scenario drill-down in CLI (20s)
+### 2) Run a correlation prompt in chat (25s)
 
-```bash
-python -m src.cli extract --scenario-id perf-001
-python -m src.cli propose --scenario-id perf-001
-python -m src.cli runbook --scenario-id fail-001
-```
+Use a prompt like:
+
+> Correlate high latency and SLO violations with node temperature, serving queue depth, critical alerts, and failed jobs. Rank likely root causes.
 
 Callout:
-- Explain feature extraction → rules → candidate ranking.
-- Show rule trail and supporting signals.
+- Planner selects relevant agents automatically.
+- Response includes executive summary + evidence-backed findings.
 
-### 4) Launch UI (35s)
+### 3) Show Visual Insights (25s)
 
-```bash
-python -m src.cli ui
-```
+In the same response:
+- Highlight chart cards (line/bar/area/pie depending on data).
+- Explain confidence badges and source agents.
+- Mention chart suggestions are schema-validated with safe fallback behavior.
 
-In browser:
-1. Select `perf-001` and show recommendation card + evidence charts.
-2. Select `fail-001` and expand runbook excerpt.
-3. Use **What-if overrides** (e.g., lower p99 or checkpoint timeout) and show recommendation updates + change message.
+### 4) Show Diagnostics transparency (15s)
 
-## Closing line
+Expand **Diagnostics (Planner, Agent Summaries, Traces)**:
+- Show routing plan and selected agents.
+- Show one trace with SQL executed, rows scanned, and elapsed time.
 
-“Decisions are deterministic and auditable; LLM is optional and only used for explanation quality.”
+### 5) Closing line (5s)
+
+“AI Factory Ops gives an explainable, multi-agent operational diagnosis in one chat flow, with evidence traces and visual insights for fast triage.”
