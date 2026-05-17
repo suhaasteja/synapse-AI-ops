@@ -41,7 +41,8 @@ ai-factory-ops/
     ui.py
     cli.py
   tests/
-  output/
+  output/                    # active recommendation JSON outputs
+  archive/                   # archived runtime/cache artifacts and logs
   data/                      # symlink to provided data folder
   requirements.txt
   Makefile
@@ -105,3 +106,4 @@ pytest tests/test_runbooks.py
 - No hardcoded per-scenario recommendation logic is used.
 - LLM never reads raw CSVs/tables directly.
 - Evidence includes top signals and triggered rule identifiers.
+- Keep recommendation outputs in `output/` for CLI/Make validation flows; archive transient caches/logs under `archive/`.

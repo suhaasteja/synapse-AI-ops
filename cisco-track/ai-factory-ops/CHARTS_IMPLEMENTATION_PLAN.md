@@ -48,6 +48,7 @@ TL;DR: Add safe, explainable chart rendering to chat responses by introducing a 
 - line
 - bar
 - area
+- pie
 
 ### 4.2 Candidate chart cards per response
 - 1 to 3 suggested charts max.
