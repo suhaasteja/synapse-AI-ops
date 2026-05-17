@@ -6,6 +6,7 @@ import json
 import os
 from typing import Any
 
+from .charts import generate_fallback_charts, normalize_chart_suggestions
 from .features import ScenarioFeatures
 from .rules import Candidate
 from .settings import settings
@@ -296,6 +297,178 @@ def plan_route(
     """Backward-compatible wrapper returning only the plan."""
     plan, _ = plan_route_detailed(question=question, available_agents=available_agents, max_agents=max_agents)
     return plan
+
+
+def _build_chart_data_samples(agent_results: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Create compact chart-ready numeric samples from agent evidence."""
+    samples: list[dict[str, Any]] = []
+    for result in agent_results:
+        agent_name = str(result.get("agent_name", "")).strip()
+        evidence = result.get("evidence", [])
+        if not agent_name or not isinstance(evidence, list):
+            continue
+
+        metrics: list[dict[str, Any]] = []
+        for item in evidence:
+            text = str(item)
+            if "=" not in text:
+                continue
+            key, raw = text.split("=", 1)
+            key = key.strip()
+            raw = raw.strip()
+            try:
+                value = float(raw)
+            except Exception:
+                continue
+            metrics.append({"x": key, "y": value})
+            if len(metrics) >= 8:
+                break
+
+        if not metrics:
+            continue
+
+        samples.append(
+            {
+                "agent_name": agent_name,
+                "confidence": result.get("confidence"),
+                "sample_points": metrics,
+            }
+        )
+    return samples
+
+
+def suggest_charts(
+    user_question: str,
+    planner_mode: str,
+    agent_results: list[dict[str, Any]],
+    max_charts: int = 3,
+    max_points: int = 100,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Suggest safe chart payloads using LLM-first planning with deterministic fallback."""
+    chart_debug: dict[str, Any] = {
+        "llm_attempts": 0,
+        "json_parse_ok": False,
+        "fallback_used": False,
+        "fallback_reason": None,
+        "chart_model": settings.aifops_explainer_model,
+    }
+
+    if max_charts <= 0 or not agent_results:
+        chart_debug["fallback_used"] = True
+        chart_debug["fallback_reason"] = "no_agent_results_or_zero_max_charts"
+        return [], chart_debug
+
+    model = settings.aifops_explainer_model
+    findings = [
+        {
+            "agent_name": str(item.get("agent_name", "")),
+            "summary": str(item.get("summary", "")),
+            "confidence": item.get("confidence"),
+            "evidence": [str(e) for e in item.get("evidence", [])[:4]],
+        }
+        for item in agent_results
+    ]
+    sample_data = _build_chart_data_samples(agent_results)
+
+    system_prompt = (
+        "You are an AIOps chart planner. "
+        "Return ONLY valid JSON as an array of chart suggestion objects. "
+        "Do not include markdown or prose."
+    )
+
+    user_prompt_base = f"""
+User question:
+{user_question}
+
+Planner mode:
+{planner_mode}
+
+Agent findings:
+{json.dumps(findings, ensure_ascii=False)}
+
+Sample chart-ready numeric data:
+{json.dumps(sample_data, ensure_ascii=False)}
+
+Requirements:
+1) Return 1 to {max_charts} chart objects (if data supports it); otherwise return [].
+2) Allowed chart_type values: "line", "bar", "area", "pie".
+3) Choose the best representation:
+   - "line" for trend/sequence progression,
+   - "area" for cumulative magnitude trends,
+   - "bar" for category comparisons,
+   - "pie" for part-to-whole composition (shares/distribution/percentage split).
+4) Avoid bar-only output when multiple charts are returned and data supports other chart types.
+5) Each object must include exactly these fields:
+   - title (string)
+   - chart_type ("line"|"bar"|"area"|"pie")
+   - x_key (string)
+   - y_key (string)
+   - series_key (string or null)
+   - data (array of objects with x:string, y:number, optional series:string|null)
+   - source_agents (array of agent names)
+   - why_this_chart (string)
+   - confidence (number 0..1)
+6) Keep each data array <= {max_points} points.
+7) Use only provided findings/sample data. Do not invent entities.
+8) Output JSON array only.
+
+Example:
+[
+  {{
+    "title": "Agent Confidence Overview",
+    "chart_type": "bar",
+    "x_key": "agent_name",
+    "y_key": "confidence",
+    "series_key": null,
+    "data": [{{"x": "inference_agent", "y": 0.86}}],
+    "source_agents": ["inference_agent"],
+    "why_this_chart": "Shows confidence by selected agents.",
+    "confidence": 0.78
+  }}
+]
+""".strip()
+
+    last_raw = ""
+    for attempt in range(2):
+        chart_debug["llm_attempts"] = attempt + 1
+        user_prompt = user_prompt_base
+        if attempt == 1:
+            user_prompt = f"{user_prompt_base}\n\nYour previous response was not valid JSON. Return only the JSON array now."
+
+        try:
+            raw = _litellm_chat(
+                model=model,
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                max_tokens=900,
+                temperature=0.0,
+            )
+            last_raw = raw
+            parsed = _extract_json_array(raw)
+            if not isinstance(parsed, list):
+                continue
+
+            chart_debug["json_parse_ok"] = True
+            raw_items = [item for item in parsed[:max_charts] if isinstance(item, dict)]
+            normalized = normalize_chart_suggestions(raw_items, max_points=max_points)
+            if normalized:
+                return [item.model_dump() for item in normalized[:max_charts]], chart_debug
+            chart_debug["fallback_reason"] = "json_valid_but_no_valid_charts"
+        except Exception:
+            continue
+
+    chart_debug["fallback_used"] = True
+    if last_raw and not chart_debug["fallback_reason"]:
+        chart_debug["fallback_reason"] = "non_json_or_invalid_chart_payload"
+    elif not chart_debug["fallback_reason"]:
+        chart_debug["fallback_reason"] = "llm_chart_planner_error"
+
+    fallback = generate_fallback_charts(
+        user_question=user_question,
+        agent_results=agent_results,
+        max_charts=max_charts,
+    )
+    return [item.model_dump() for item in fallback], chart_debug
 
 
 def explain(

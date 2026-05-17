@@ -43,6 +43,7 @@ test_cases:
     expected_agents: ["inference_agent", "node_metrics_agent", "serving_agent", "alerts_logs_agent", "job_queue_agent"]
     allow_extra_agents: true
     min_agent_count: 5
+    min_chart_count: 1
     required_evidence_patterns: ["agents consulted", "aggregate confidence"]
 
   - id: eval_multi_4way_001
@@ -50,6 +51,7 @@ test_cases:
     expected_agents: ["inference_agent", "node_metrics_agent", "serving_agent", "alerts_logs_agent"]
     allow_extra_agents: true
     min_agent_count: 4
+    min_chart_count: 1
     required_evidence_patterns: ["p95 latency", "critical alerts"]
 
   - id: eval_multi_inf_job_001
@@ -57,6 +59,7 @@ test_cases:
     expected_agents: ["inference_agent", "job_queue_agent"]
     allow_extra_agents: true
     min_agent_count: 2
+    min_chart_count: 1
     required_evidence_patterns: ["p95 latency", "failed jobs"]
 
   - id: eval_multi_node_job_001
@@ -64,6 +67,7 @@ test_cases:
     expected_agents: ["node_metrics_agent", "job_queue_agent"]
     allow_extra_agents: true
     min_agent_count: 2
+    min_chart_count: 1
     required_evidence_patterns: ["temperature", "failed jobs"]
 
   - id: eval_multi_serving_inference_001
@@ -71,6 +75,7 @@ test_cases:
     expected_agents: ["inference_agent", "serving_agent"]
     allow_extra_agents: true
     min_agent_count: 2
+    min_chart_count: 1
     required_evidence_patterns: ["slo violations", "queue depth"]
 
   - id: eval_multi_alert_job_001
@@ -78,6 +83,7 @@ test_cases:
     expected_agents: ["alerts_logs_agent", "job_queue_agent"]
     allow_extra_agents: true
     min_agent_count: 2
+    min_chart_count: 1
     required_evidence_patterns: ["critical alerts", "failed jobs"]
 
   - id: eval_multi_alert_node_001
@@ -85,6 +91,7 @@ test_cases:
     expected_agents: ["alerts_logs_agent", "node_metrics_agent"]
     allow_extra_agents: true
     min_agent_count: 2
+    min_chart_count: 1
     required_evidence_patterns: ["critical alerts", "temperature"]
 
   - id: eval_ambiguous_001

@@ -16,15 +16,17 @@ class ChatRequest(BaseModel):
 
 
 class ChatResponse(BaseModel):
-    """Outgoing chat response with traces for UI."""
+    """Outgoing chat response with traces and chart suggestions for UI."""
 
     question: str
     answer: str
     planner_mode: str
     planner_debug: dict
+    chart_debug: dict
     plan: list[dict]
     agent_results: list[dict]
     traces: list[dict]
+    chart_suggestions: list[dict]
 
 
 app = FastAPI(title="AI Factory Ops Orchestrator API", version="0.1.0")

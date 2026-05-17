@@ -14,7 +14,7 @@ from .agents import (
     run_node_metrics_agent,
     run_serving_agent,
 )
-from .llm import plan_route_detailed, summarize_orchestrated_answer
+from .llm import plan_route_detailed, suggest_charts, summarize_orchestrated_answer
 
 
 class PlannerStep(TypedDict):
@@ -32,8 +32,10 @@ class OrchestratorState(TypedDict):
     route_plan: list[PlannerStep]
     planner_mode: str
     planner_debug: dict[str, Any]
+    chart_debug: dict[str, Any]
     agent_results: list[dict[str, Any]]
     traces: list[dict[str, Any]]
+    chart_suggestions: list[dict[str, Any]]
     final_answer: str
 
 
@@ -171,13 +173,33 @@ def _synthesis_node(state: OrchestratorState) -> OrchestratorState:
     results = state.get("agent_results", [])
     planner_mode = state.get("planner_mode", "unknown")
     planner_debug = state.get("planner_debug", {})
+    question = state.get("question", "")
+
     if not results:
         final = "I could not find enough evidence from the CSV agents to answer this query."
-        return {**state, "final_answer": final}
+        return {
+            **state,
+            "final_answer": final,
+            "chart_suggestions": [],
+            "chart_debug": {
+                "llm_attempts": 0,
+                "json_parse_ok": False,
+                "fallback_used": True,
+                "fallback_reason": "no_agent_results",
+            },
+        }
+
+    chart_suggestions, chart_debug = suggest_charts(
+        user_question=question,
+        planner_mode=planner_mode,
+        agent_results=results,
+        max_charts=3,
+        max_points=100,
+    )
 
     avg_confidence = sum(item["confidence"] for item in results) / len(results)
     executive_summary = summarize_orchestrated_answer(
-        user_question=state.get("question", ""),
+        user_question=question,
         agent_results=results,
         planner_mode=planner_mode,
     )
@@ -188,8 +210,7 @@ def _synthesis_node(state: OrchestratorState) -> OrchestratorState:
         "",
         "### Orchestrated Analysis",
         "",
-        f"- Planner mode: {planner_mode}",
-        f"- Planner attempts: {planner_debug.get('llm_attempts', 0)} | JSON parse: {'yes' if planner_debug.get('json_parse_ok') else 'no'} | Salvage: {'yes' if planner_debug.get('salvage_used') else 'no'}",
+        f"- Routing mode: {planner_mode}",
         f"- Agents consulted: {', '.join(item['agent_name'] for item in results)}",
         f"- Aggregate confidence: {avg_confidence:.2f}",
         "",
@@ -207,6 +228,8 @@ def _synthesis_node(state: OrchestratorState) -> OrchestratorState:
     return {
         **state,
         "final_answer": "\n".join(lines).strip(),
+        "chart_suggestions": chart_suggestions,
+        "chart_debug": chart_debug,
     }
 
 
@@ -232,8 +255,10 @@ def run_orchestrated_query(question: str) -> dict[str, Any]:
         "route_plan": [],
         "planner_mode": "unknown",
         "planner_debug": {},
+        "chart_debug": {},
         "agent_results": [],
         "traces": [],
+        "chart_suggestions": [],
         "final_answer": "",
     }
     final_state = app.invoke(initial_state)
@@ -242,7 +267,9 @@ def run_orchestrated_query(question: str) -> dict[str, Any]:
         "answer": final_state.get("final_answer", ""),
         "planner_mode": final_state.get("planner_mode", "unknown"),
         "planner_debug": final_state.get("planner_debug", {}),
+        "chart_debug": final_state.get("chart_debug", {}),
         "plan": final_state.get("route_plan", []),
         "agent_results": final_state.get("agent_results", []),
         "traces": final_state.get("traces", []),
+        "chart_suggestions": final_state.get("chart_suggestions", []),
     }

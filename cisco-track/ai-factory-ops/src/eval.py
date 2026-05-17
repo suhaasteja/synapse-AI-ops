@@ -11,6 +11,7 @@ import yaml
 from rich.console import Console
 from rich.table import Table
 
+from .charts import normalize_chart_suggestions
 from .orchestrator import run_orchestrated_query
 
 
@@ -26,6 +27,7 @@ class EvalCase:
     max_agent_count: int | None
     expected_planner_mode: str | None
     required_evidence_patterns: list[str]
+    min_chart_count: int
 
 
 def _load_eval_cases(corpus_path: Path) -> list[EvalCase]:
@@ -54,6 +56,7 @@ def _load_eval_cases(corpus_path: Path) -> list[EvalCase]:
                 for item in row.get("required_evidence_patterns", [])
                 if str(item).strip()
             ],
+            min_chart_count=int(row.get("min_chart_count", 0)),
         )
         cases.append(case)
     return cases
@@ -85,6 +88,12 @@ def _case_result(case: EvalCase) -> dict[str, Any]:
     ]
     evidence_ok = not missing_patterns
 
+    raw_charts = response.get("chart_suggestions", [])
+    raw_chart_items = [item for item in raw_charts if isinstance(item, dict)] if isinstance(raw_charts, list) else []
+    valid_charts = normalize_chart_suggestions(raw_chart_items, max_points=100)
+    chart_count = len(valid_charts)
+    charts_ok = chart_count >= case.min_chart_count
+
     expected_count = len(case.expected_agents) if case.expected_agents else max(1, len(actual_agents))
     overlap = len(actual_set & expected_set) if expected_set else len(actual_set)
     route_score = overlap / expected_count if expected_count else 1.0
@@ -94,9 +103,10 @@ def _case_result(case: EvalCase) -> dict[str, Any]:
         if not case.required_evidence_patterns
         else (len(case.required_evidence_patterns) - len(missing_patterns)) / len(case.required_evidence_patterns)
     )
-    overall_score = round((route_score + mode_score + evidence_score) / 3.0, 3)
+    chart_score = 1.0 if case.min_chart_count <= 0 else min(chart_count / case.min_chart_count, 1.0)
+    overall_score = round((route_score + mode_score + evidence_score + chart_score) / 4.0, 3)
 
-    passed = routing_ok and mode_ok and count_ok and evidence_ok
+    passed = routing_ok and mode_ok and count_ok and evidence_ok and charts_ok
 
     notes: list[str] = []
     if missing:
@@ -109,6 +119,8 @@ def _case_result(case: EvalCase) -> dict[str, Any]:
         notes.append(f"count={len(actual_agents)}")
     if missing_patterns:
         notes.append(f"evidence_missing={','.join(missing_patterns)}")
+    if not charts_ok:
+        notes.append(f"charts={chart_count}, min={case.min_chart_count}")
     if not notes:
         notes.append("ok")
 
@@ -117,6 +129,7 @@ def _case_result(case: EvalCase) -> dict[str, Any]:
         "pass": passed,
         "mode": mode,
         "agent_count": len(actual_agents),
+        "chart_count": chart_count,
         "agents": actual_agents,
         "missing": missing,
         "score": overall_score,
@@ -148,6 +161,7 @@ def run_eval_suite(
     detail.add_column("pass")
     detail.add_column("mode")
     detail.add_column("agents")
+    detail.add_column("charts")
     detail.add_column("score")
     detail.add_column("notes")
 
@@ -162,6 +176,7 @@ def run_eval_suite(
             "[green]PASS[/green]" if ok else "[red]FAIL[/red]",
             str(result["mode"]),
             str(result["agent_count"]),
+            str(result.get("chart_count", 0)),
             f"{float(result['score']):.3f}",
             str(result["notes"]),
         )
