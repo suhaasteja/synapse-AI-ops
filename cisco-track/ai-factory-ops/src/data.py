@@ -15,6 +15,7 @@ def _default_db_path() -> Path:
 
     # Support both local and Render monorepo layouts.
     candidates = [
+        Path(__file__).resolve().parents[1] / "ai_factory.duckdb",
         Path(__file__).resolve().parents[2] / "ai_factory_hackathon_student" / "ai_factory.duckdb",
         Path(__file__).resolve().parents[3] / "ai_factory_hackathon_student" / "ai_factory.duckdb",
     ]
