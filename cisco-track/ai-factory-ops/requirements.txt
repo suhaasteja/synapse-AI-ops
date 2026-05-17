@@ -1,0 +1,15 @@
+duckdb
+pandas
+pydantic
+typer
+rich
+litellm
+pytest
+streamlit
+plotly
+fastapi
+uvicorn
+langgraph
+langchain-core
+pydantic-settings
+pyyaml
