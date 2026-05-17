@@ -1,0 +1,36 @@
+services:
+  - type: web
+    name: ai-factory-ops-api
+    runtime: python
+    plan: free
+    region: oregon
+    rootDir: cisco-track/ai-factory-ops
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn src.api:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    autoDeploy: true
+    numInstances: 1
+
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12
+      - key: ALLOWED_ORIGINS
+        value: https://synapse-ai-ops.vercel.app
+      - key: GOOGLE_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: AIFOPS_ROUTER_MODEL
+        value: gemini/gemini-2.0-flash
+      - key: AIFOPS_EXPLAINER_MODEL
+        value: gemini/gemini-2.0-flash
+
+# Optional upgrade profile (Starter+):
+# - Add a persistent disk if you need runtime DuckDB writes.
+# - Then set DUCKDB_PATH=/data/ai_factory.duckdb in envVars.
+# disk:
+#   name: aif-data
+#   mountPath: /data
+#   sizeGB: 1

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
@@ -31,9 +33,13 @@ class ChatResponse(BaseModel):
 
 app = FastAPI(title="AI Factory Ops Orchestrator API", version="0.1.0")
 
+_default_origins = ["http://localhost:3000", "http://127.0.0.1:3000"]
+_env_origins = [item.strip() for item in os.getenv("ALLOWED_ORIGINS", "").split(",") if item.strip()]
+_allow_origins = list(dict.fromkeys(_default_origins + _env_origins))
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_origins=_allow_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
