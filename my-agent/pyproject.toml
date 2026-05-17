@@ -1,0 +1,17 @@
+[project]
+name = "my-agent"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "python-dotenv>=1.2.2",
+    "opencv-python>=4.10.0.84",
+    "easyocr>=1.7.2",
+    "vision-agents[gemini,getstream]>=0.5.9",
+]
+
+[tool.uv.sources]
+vision-agents = { path = "../Vision-Agents/agents-core", editable = true }
+vision-agents-plugins-gemini = { path = "../Vision-Agents/plugins/gemini", editable = true }
+vision-agents-plugins-getstream = { path = "../Vision-Agents/plugins/getstream", editable = true }
